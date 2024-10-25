@@ -98,6 +98,23 @@ ggplot(health_data, aes(x = Outcome)) +
   geom_text(stat = 'count', aes(label = scales::percent(..count../sum(..count..))), vjust = -0.5) +
   labs(title = "Distribution of Outcome", x = "outcome", y = "count")
 
+#EDA sample
+sample1 <- sample_n(health_data, 1000)
+head(sample1)
+table(sample1$Outcome)/nrow(sample1) *100
+
+ggplot(data = sample1, aes(x = Outcome, y = Age)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Age vs Outcome", x = "Outcome", y = "Age")
+
+ggplot(data = sample1, aes(x = Outcome, y = HealthcareCost)) +
+  geom_boxplot(fill = "lightyellow") +
+  labs(title = "HealthcareCost vs Outcome", x = "Outcome", y = "HealthcareCost")
+
+ggplot(data = sample1, aes(x = Outcome, y = GeneticRisk)) +
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "GeneticRisk vs Outcome", x = "Outcome", y = "GeneticRisk")
+
 
 #View Distribution of IV variables (scatter & boxplots)
 ggplot(health_data, aes(x = Outcome, fill = Gender)) +
@@ -149,7 +166,6 @@ ordinal_model <- polr(Outcome ~ Age + Diabetes, data = health_data, Hess=TRUE)
 summary(multinom_model)
 summary(ordinal_model)
 
-
 #Linear Regression EDA
 temp = health_data
 temp$Outcome <- as.numeric(factor(health_data$Outcome, levels = c("Healthy", "At Risk", "Critical")))
@@ -157,19 +173,120 @@ linear_model <- lm(Outcome ~ ., data = temp)
 summary(linear_model)
 
 
-#Split Data
 
 
 ################### MODEL BUILDING ######################
 
+library(caTools)
+library(glmnet)
+
+
+# Split data into Training and Testing sets (70% train, 30% test)
+set.seed(123)
+split <- sample.split(health_data$Outcome, SplitRatio = 0.7)
+train_data <- subset(health_data, split == TRUE)
+test_data <- subset(health_data, split == FALSE)
+
+#Verify Split % 
+nrow(train_data)/nrow(health_data) *100
+nrow(test_data)/nrow(health_data) *100
+
+#Verify Distribution in sets
+table(train_data$Outcome)/nrow(train_data) *100
+table(test_data$Outcome)/nrow(test_data) *100
+
+
+# Multinomial Logistic models
+multinom_model <- multinom(Outcome ~ Age + Diabetes + HeartDisease, data = train_data)
+multinom_model_full <- vglm(Outcome ~ ., data = train_data, family = multinomial)
+summary(multinom_model)
+
+#Ordinal Logistic model
+ordinal_model <- polr(Outcome ~ Age + Diabetes, data = train_data, Hess=TRUE)
+summary(ordinal_model)
+
+#LASSO
+x_train <- model.matrix(Outcome ~ . - 1, data = train_data)  # -1 removes intercept to prevent duplication
+x_test <- model.matrix(Outcome ~ . - 1, data = test_data)
+y_train <- train_data$Outcome
+y_test <- test_data$Outcome
+
+# LASSO Multinomial Models
+lasso_model <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1) #standardized by default
+lasso_model_scaled <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1, standardize = TRUE) #explicit scaling 
+lasso_model_no_scaling <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1, standardize = FALSE) #NO scaling
+
+#plot lasso models optimaL lambda
+par(mfrow=c(2,2))
+plot(lasso_model)
+plot(lasso_model_scaled)
+plot(lasso_model_no_scaling)
+
+best_lambda <- lasso_model$lambda.min
+lasso_model$lambda.min
+lasso_model_scaled$lambda.min
+lasso_model_no_scaling$lambda.min  #too large; strong regularization needed 
+
+#View Lasso selected variables
+coefficients <- coef(lasso_model, s = "lambda.min") #Health: -systolic_stg1, +BMI_overweight
+
+
+########################## Predictions ###################
+
+library(caret)
+
+# Make predictions on the test data
+#LASSO
+# Check the dimensions to make sure x_train and x_test match the respective y_train and y_test sizes
+dim(x_train)  # Should match length of y_train
+dim(x_test)   # Should match length of y_test
+length(y_train)
+length(y_test)
+
+predictions <- predict(lasso_model, newx = x_test, s = "lambda.min", type = "response")
+predictions <- drop(predictions)  # removes the unnecessary third dimension
+dim(predictions)
+pred_class_indices  <- max.col(predictions, ties.method = "first")
+pred_class <- factor(pred_class_indices, levels = 1:3, labels = levels(y_test))
+
+#y_test <- factor(y_test, levels = levels(y_test))
+length(pred_class)  
+length(y_test)   
+
+
+#Multinomial & Ordinal Model no lasso
+pred_multinom <- predict(multinom_model, newdata = test_data)
+pred_multinom_full <- predict(multinom_model_full, newdata = test_data)
+pred_ordinal <- predict(ordinal_model, newdata = test_data)
 
 
 
+######## Model Validation ##########
+
+#lasso multinomial model
+confusion_matrix <- confusionMatrix(pred_class, y_test)
+confusion_matrix
+accuracy <- confusion_matrix$overall[1]
+print('The multinomial logistic model with lasso variable selection, is only predicting the healthy class, and no instances of at-risk or critical. This is a clear sign of bias or class imbalance in the model.')
+cat(accuracy, 'The model accuracy is misleading since the model only correctly predicts the majority class')
+
+tn <- confusion_matrix$table[1, 1]  # True Negative
+fn <- confusion_matrix$table[2, 1]  # False Negative
+fp <- confusion_matrix$table[1, 2]  # False Positive
+tp <- confusion_matrix$table[2, 2]  # True Positive
+precision <- tp / (tp + fp)
+recall <- tp / (tp + fn)
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+cat("Precision: ", precision, "\n", '--> biased model')
+cat("Recall: ", recall, "\n")
+cat("F1-Score: ", f1_score, "\n")
 
 
-
-
-
+#No lasso models
+confusionMatrix(pred_multinom, y_test)$overall[1]
+confusionMatrix(pred_ordinal, y_test)$overall[1]
+#confusionMatrix(pred_multinom_full, y_test)$overall[1]
 
 
 
