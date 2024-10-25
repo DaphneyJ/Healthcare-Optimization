@@ -1,0 +1,361 @@
+---
+title: "Project_EDA"
+author: "Maria Martinez"
+date: "2024-10-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+```
+
+
+```{r}
+# Packages and Libraries 
+library(tidyverse)
+library(readr)
+library(Ecdat)
+library(ggplot2)
+library(ISLR)
+library(GGally)
+library(car)
+library (scatterplot3d)
+library (corrplot)
+library(corrgram)
+library(stats)
+library(dplyr)
+library(outliers)
+
+
+```
+
+
+```{r}
+# Setting Directory and clean 
+getwd()
+rm(list = ls())
+set.seed(28)
+
+```
+## Read the data
+
+```{r}
+data <- read.csv("health_data.csv")
+head(data)
+View(head(data,10))
+str(data)
+
+
+```
+## Data to variable type and creating the main dummy variables for exploratory step
+```{r}
+data$Outcome <- as.factor(data$Outcome)
+data$Gender<- as.factor(data$Gender)
+data$SmokingStatus <- as.factor(data$SmokingStatus)
+data$AlcoholConsumption <- as.factor(data$AlcoholConsumption)
+data$ExerciseFrequency <- as.factor(data$ExerciseFrequency) 
+data$Diabetes <- as.factor(data$Diabetes)
+data$HeartDisease <- as.factor(data$HeartDisease)
+data$PhysicalActivityLevel <- as.factor(data$PhysicalActivityLevel) 
+data$DietQuality <- as.factor(data$DietQuality)
+data$MedicationAdherence <- as.factor(data$MedicationAdherence)
+
+head(data)
+data <-data %>% mutate (Critical = ifelse (Outcome == "Critical" , 1,0)) %>% mutate (At_Risk = ifelse (Outcome == "At Risk" , 1,0)) %>% mutate (Healthy = ifelse (Outcome == "Healthy" , 1,0))
+view(head(data))
+str(data)
+
+```
+
+## Percentage (Darren Warren)
+```{r}
+Table <- data %>% group_by(Outcome) %>%
+  summarise( count = n())
+table <- as.data.frame(Table)
+str(table)
+
+total = sum(table$count)
+table$percentage <- round(table$count/total*100,0)
+table
+```
+
+
+```{r}
+data_critical <- data %>% filter (Outcome == "Critical")
+head(data_critical)
+
+```
+
+
+```{r}
+data_critical <- data_critical[,1:17]
+str(data_critical)
+```
+
+
+```{r}
+data_critical %>% group_by(HeartDisease, Diabetes) %>%
+summarise (heart_diabetes_disease= n())
+```
+
+## Cholesterol Level in the dataset for Critical group
+
+```{r}
+TableCh <- data_critical %>% 
+  summarise( count = n(), avg_Cholesterol = mean(CholesterolLevel), min(CholesterolLevel), max(CholesterolLevel))
+TableCh
+```
+## Diabetes in the dataset for Outcome group
+
+```{r}
+TableD <- data_critical %>% group_by(Diabetes) %>%
+  summarise ( count =n())
+TableD
+
+```
+
+## Demographic - Gender in the data set for Outcome Group
+```{r}
+TableG <- data %>% group_by(Gender) %>%
+  summarise ( count =n())
+TableG
+
+```
+
+## Demographic - Age in the data set for Outcome Group
+```{r}
+TableAg <- data %>% group_by(Age) %>%
+  summarise ( count =n())
+TableAg
+
+```
+
+
+## Histogram by Age
+
+```{r}
+
+ggplot(data=data_critical, aes(data_critical$Age)) + 
+                 geom_histogram(breaks=seq(18, 90, by =2), 
+                 col="red", 
+                 fill="green", 
+                 alpha = .2) + 
+  labs(title="Histogram for age") +
+  labs(x="Age", y="Count")
+
+```
+## Histogram by BMI
+
+```{r}
+ggplot(data=data_critical, aes(data_critical$BMI)) + 
+                 geom_histogram(breaks=seq(10, 50, by =2), 
+                 col="red", 
+                 fill="green", 
+                 alpha = .2) + 
+  labs(title="Histogram for BMI") +
+  labs(x="BMI", y="Count")
+
+
+
+```
+## Histogram by Genetic Risk
+
+```{r}
+
+ggplot(data=data_critical, aes(data_critical$GeneticRisk)) + 
+                 geom_histogram(breaks=seq(0, 1, by =.01), 
+                 col="red", 
+                 fill="green", 
+                 alpha = .2) + 
+  labs(title="Histogram for Genetic Risk") +
+  labs(x="Genetic Risk", y="Count")
+
+```
+## Histogram by Cholesterol Level
+
+```{r}
+min(data_critical$CholesterolLevel)
+max(data_critical$CholesterolLevel)
+
+ggplot(data=data_critical, aes(data_critical$CholesterolLevel)) + 
+                 geom_histogram(breaks=seq(100, 300, by =2), 
+                 col="red", 
+                 fill="green", 
+                 alpha = .2) + 
+  labs(title="Histogram for Cholesterol Level") +
+  labs(x="Cholesterol Level", y="Count")
+
+
+
+```
+
+
+```{r}
+```
+
+## Extract a ramdon sample "A subset from the data set". Recommend 1000 thousand data points.
+
+
+```{r}
+sample_1 <- sample_n(data_critical,1000)
+head(sample_1)
+```
+
+
+## Cholesterol Level in the sample 1 
+
+```{r}
+TableCh_1 <- sample_1 %>% 
+  summarise( count = n(), n_Cholesterol = mean(CholesterolLevel), min(CholesterolLevel), max(CholesterolLevel))
+TableCh_1
+
+```
+`
+
+## Boxplot graph between Age vs Diabetes
+```{r}
+ggplot(data=sample_1, aes(x= factor(Diabetes), y = Age, fill= factor(Diabetes))) + geom_boxplot() + ggtitle("BoxPlot for Age vs. Diabetes") + labs(x="Diabetes", y="Age")
+
+```
+## Boxplot graph between Age vs HeartDisease
+
+```{r}
+ggplot(data=sample_1, aes(x=factor(HeartDisease), y = Age, fill=factor(HeartDisease))) + geom_boxplot() + ggtitle("BoxPlot for Age vs. Heart Disease") + labs(x="Heart Disease", y="Age")
+
+```
+## Boxplot Graph between Cholesterol vs Heart Disease
+
+```{r}
+ggplot(data=sample_1, aes(x=factor(HeartDisease), y = CholesterolLevel, fill= factor(HeartDisease))) + geom_boxplot() + ggtitle("BoxPlot for Cholesterol Level vs. Heart Disease") + labs(x="Heart Disease", y="Cholesterol Level")
+```
+
+
+## Boxplot Graph between Cholesterol vs Diabetes
+
+```{r}
+ggplot(data=sample_1, aes(x= factor(Diabetes), y = CholesterolLevel, fill= factor(Diabetes))) + geom_boxplot() + ggtitle("BoxPlot for Cholesterol Level vs. Diabetes") + labs(x="Diabetes", y="Cholesterol Level")
+
+```
+## Boxplot Graph between Genetic Risk vs Heart Disease
+
+
+```{r}
+ggplot(data=sample_1, aes(x= factor(HeartDisease), y = GeneticRisk, fill= factor(HeartDisease))) + geom_boxplot() + ggtitle("BoxPlot for Genetic Risk vs. Heart Disease") + labs(x="Heart Disease", y="Genetic Risk")
+
+```
+## Boxplot Graph between Annual Checkups  vs Heart Disease
+
+
+```{r}
+ggplot(data=sample_1, aes(x= factor(HeartDisease), y = AnnualCheckups, fill= factor(HeartDisease))) + geom_boxplot() + ggtitle("BoxPlot for Annual Checups vs. Heart Disease") + labs(x="Heart Disease", y="Annual Chech Ups")
+```
+
+
+
+```{r}
+
+ggplot(data=sample_1, aes(x= factor(Diabetes), y = AnnualCheckups, fill= factor(Diabetes))) + geom_boxplot() + ggtitle("BoxPlot for Annual Checups vs. Diabetes") + labs(x="Diabetes", y="Annual Chech Ups")
+```
+# Mapping
+
+## Age vs BMI  and Heart Disease
+
+```{r}
+ggplot(data = sample_1) + 
+  geom_point(mapping = aes(x = Age, y = BMI, color = HeartDisease)) + 
+  theme(axis.text.x = element_text(size=15), axis.text.y = element_text(size=15), 
+  axis.title=element_text(size=15,face="bold"))
+
+```
+## Age vs BMI  and Diabetes
+
+```{r}
+ggplot(data = sample_1) + 
+  geom_point(mapping = aes(x = Age, y = BMI, color = Diabetes)) + 
+  theme(axis.text.x = element_text(size=15), axis.text.y = element_text(size=15), 
+  axis.title=element_text(size=15,face="bold"))
+```
+Genetic Risk vs BMI and Diabetes
+
+```{r}
+ggplot(data = sample_1) + 
+  geom_point(mapping = aes(x = GeneticRisk, y = BMI, color = Diabetes)) + 
+  theme(axis.text.x = element_text(size=15), axis.text.y = element_text(size=15), 
+  axis.title=element_text(size=15,face="bold"))
+
+```
+# BMI vs Genetic Risk and Heart Disease
+
+```{r}
+
+ggplot(data = sample_1) + 
+  geom_point(mapping = aes(x = GeneticRisk, y = BMI, color = HeartDisease)) + 
+  theme(axis.text.x = element_text(size=15), axis.text.y = element_text(size=15), 
+  axis.title=element_text(size=15,face="bold"))
+
+
+```
+## Diabetes vs Genetic Risk
+
+```{r}
+ggplot(sample_1, aes(x=GeneticRisk, y=Diabetes)) + geom_point() + 
+# add logit curve
+  stat_smooth(method="glm", method.args=list(family="binomial"), se=FALSE) +
+#add the regression line
+    geom_smooth(method=lm,  color="red", # Add linear regression lines
+              se=FALSE,    # Don't add shaded confidence region
+              fullrange=TRUE) 
+
+
+```
+
+## Diabetes vs BMI
+
+```{r}
+
+ggplot(sample_1, aes(x=BMI, y=Diabetes)) + geom_point() + 
+# add logit curve
+  stat_smooth(method="glm", method.args=list(family="binomial"), se=FALSE) +
+#add the regression line
+    geom_smooth(method=lm,  color="red", # Add linear regression lines
+              se=FALSE,    # Don't add shaded confidence region
+              fullrange=TRUE) 
+
+
+
+
+
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
