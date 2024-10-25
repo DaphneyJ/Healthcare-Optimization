@@ -45,7 +45,7 @@ health_data <- health_data %>%
 health_data <- health_data %>%
   mutate(
     CholesterolCategory = case_when(
-      CholesterolLevel < 200 ~ "Heart-Healthy",
+      CholesterolLevel < 200 ~ "Heart-Healthy", 
       CholesterolLevel >= 200 & CholesterolLevel <= 239 ~ "At-Risk",
       CholesterolLevel >= 240 ~ "Dangerous",
       TRUE ~ "Unknown"
