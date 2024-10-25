@@ -81,7 +81,7 @@ str(health_data)
 colSums(is.na(health_data))
 any(is.na(health_data))
 
-
+write.csv(health_data,"health_struct.csv",row.names = FALSE)
 ################### EXPLORATORY ANALYSIS ######################
 
 # Check structure and summary of the dataset
