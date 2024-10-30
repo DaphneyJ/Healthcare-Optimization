@@ -11,7 +11,6 @@ library(MASS)
 library(dplyr)
 library(gridExtra)
 
-
 ################### DATA PRE-PROCESSING ######################
 #Check data structure
 str(health_data)
