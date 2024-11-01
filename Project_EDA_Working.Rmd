@@ -1,0 +1,316 @@
+---
+title: "Project_EDA_Working"
+author: "Maria Martinez"
+date: "2024-11-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggcorrplot)
+library(MASS)
+
+```
+
+
+```{r}
+rm(list = ls())
+getwd()
+```
+
+
+```{r}
+data1 <- read.csv("health_struct.csv", header = TRUE)
+str(data1)
+```
+```{r}
+#Convert categorical variables (Nominal variables)
+data1$Gender <- as.factor(data1$Gender)
+data1$SmokingStatus <- as.factor(data1$SmokingStatus)
+data1$AlcoholConsumption <- as.factor(data1$AlcoholConsumption)
+data1$ExerciseFrequency <- as.factor(data1$ExerciseFrequency)
+data1$Diabetes <- as.factor(data1$Diabetes)
+data1$HeartDisease <- as.factor(data1$HeartDisease)
+data1$PhysicalActivityLevel <- as.factor(data1$PhysicalActivityLevel)
+data1$DietQuality <- as.factor(data1$DietQuality)
+data1$MedicationAdherence <- as.factor(data1$MedicationAdherence)
+
+```
+
+
+```{r}
+#Specify order of levels for Ordinal Variables
+data1$Outcome <- factor(data1$Outcome, levels = c("Healthy", "At Risk", "Critical"))
+data1$Systolic <- factor(data1$Systolic, levels = c("Normal", "Elevated", "Hypertension_sg1", "Hypertension_sg2"))
+data1$Diastolic <- factor(data1$Diastolic, levels = c("Normal", "Hypertension_sg1", "Hypertension_sg2"))
+data1$LevelCho <- factor(data1$LevelCho, levels = c("Healthy", "At-risk", "High"))
+data1$LevelBmi <- factor(data1$LevelBmi, levels = c("Underweight", "Normal weight", "Overweight", "Obese"))
+
+data1$AlcoholConsumption <- factor(data1$AlcoholConsumption, levels = c("Never", "Occasionally", "Regularly"))
+data1$ExerciseFrequency <- factor(data1$ExerciseFrequency, levels = c("Never", "Rarely", "Sometimes", "Often"))
+data1$PhysicalActivityLevel <- factor(data1$PhysicalActivityLevel, levels = c("Low", "Medium", "High"))
+data1$DietQuality <- factor(data1$DietQuality, levels = c("Poor", "Average", "Good"))
+data1$MedicationAdherence <- factor(data1$MedicationAdherence, levels = c("Low", "Medium", "High"))
+
+
+#Verify changes
+str(data1)
+colSums(is.na(data1))
+any(is.na(data1))
+
+
+```
+
+
+```{r}
+#View the Distribution of the target variable
+table(data1$Outcome)/nrow(data1) * 100  # % of each class
+Outcome_dist <- prop.table(table(data1$Outcome)) * 100
+Outcome_dist
+```
+
+
+```{r}
+ggplot(data1, aes(x = Outcome)) +
+  geom_bar(fill = "skyblue") +
+  geom_text(stat = 'count', aes(label = scales::percent(..count../sum(..count..))), vjust = -0.5) +
+  labs(title = "Distribution of Outcome", x = "outcome", y = "count")
+
+
+```
+
+# Dataframes 
+
+```{r}
+Healthy_df <- filter(data1, Outcome == "Healthy")
+AtRisk_df <- filter(data1, Outcome == "At Risk")
+Critical_df <- filter(data1, Outcome == "Critical")
+
+```
+
+## Data structure in illness variables
+
+### Diabetes
+### Heart Disease
+```{r}
+data1 %>% group_by(Outcome, Diabetes)  %>% summarise(n= n())
+data1 %>%  group_by(Outcome) %>% summarize(mean(Diabetes != "No"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(Diabetes != "Yes"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(HeartDisease != "No"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(HeartDisease != "Yes"))
+
+```
+
+### Level Cholesterol ***
+```{r}
+data1 %>%  group_by(Outcome) %>% summarize(mean(LevelCho == "Healthy"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(LevelCho == "At-risk"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(LevelCho == "High"))
+
+```
+### Level of BMI ***
+
+```{r}
+data1 %>%  group_by(Outcome) %>% summarize(mean(LevelBmi == "Underweight"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(LevelBmi == "Normal weight"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(LevelBmi == "Overweight"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(LevelBmi == "Obese"))
+```
+
+### Blood Pressure  (Systolic ***)
+
+```{r}
+data1 %>%  group_by(Outcome) %>% summarize(mean(Systolic == "Normal"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(Systolic == "Elevated"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(Systolic == "Hypertension_sg1"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(Systolic == "Hypertension_sg2"))
+
+data1 %>%  group_by(Outcome) %>% summarize(mean(Diastolic == "Normal"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(Diastolic == "Hypertension_sg1"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(Diastolic == "Hypertension_sg2"))
+```
+
+## Data Structure on uncontrollable pre condition
+### Genetic Risk - Distribution
+
+```{r}
+data1 %>% filter(GeneticRisk > 0) %>%
+ggplot(aes(x=GeneticRisk, fill=Outcome)) + 
+  geom_histogram(binwidth =0.1, alpha=0.1, position="identity") +
+  xlim(0, 1) + 
+  xlab("Genetic Risk") + ylab("Numbers of People") + 
+  labs(title="Distribution of Genetic Risk by Outcome")
+
+```
+
+### Genetic Risk - Boxplot
+```{r}
+
+ggplot(data = data1, aes(x = Outcome, y = GeneticRisk)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "GeneticRisk vs Outcome", x = "Outcome", y = "Genetic Risk")
+
+```
+## Behaviors Variables Related to Health
+
+### Smoking Status
+
+```{r}
+data1 %>%  group_by(Outcome) %>% summarize(mean(SmokingStatus == "Never"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(SmokingStatus == "Former"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(SmokingStatus == "Current"))
+
+
+```
+
+### Alcohol Consumption  *
+
+```{r}
+
+data1 %>%  group_by(Outcome) %>% summarize(mean(AlcoholConsumption == "Never"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(AlcoholConsumption == "Occasionally"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(AlcoholConsumption == "Regularly"))
+
+
+```
+
+### Exercise Frequency   **
+```{r}
+data1 %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Never"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Rarely"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Sometimes"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Often"))
+```
+
+
+### Physical Activity *
+```{r}
+data1 %>%  group_by(Outcome) %>% summarize(mean(PhysicalActivityLevel == "Low"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(PhysicalActivityLevel == "Medium"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(PhysicalActivityLevel == "High"))
+
+```
+
+
+
+### Diet Quality  **
+```{r}
+data1 %>%  group_by(Outcome) %>% summarize(mean(DietQuality == "Poor"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(DietQuality == "Average"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(DietQuality == "Good"))
+```
+## Demographics
+### Gender
+
+
+```{r}
+### Gender
+data1 %>%  group_by(Outcome) %>% summarize(mean(Gender == "Female"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(Gender == "Male"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(Gender == "Other"))
+
+```
+
+### Age
+```{r}
+data1 %>% filter(Age > 0) %>%
+ggplot(aes(x=Age, fill=Outcome)) + 
+  geom_histogram(binwidth =1, alpha=0.5, position="identity") +
+  xlim(10, 100) + 
+  xlab("Age") + ylab("Numbers of People") + 
+  labs(title="Distribution of Age by Outcome")
+
+
+```
+
+
+##  Medication Adherence
+
+```{r}
+data1 %>%  group_by(Outcome) %>% summarize(mean(MedicationAdherence == "Low"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(MedicationAdherence == "Medium"))
+data1 %>%  group_by(Outcome) %>% summarize(mean(MedicationAdherence == "High"))
+
+```
+## Annual Chechups
+
+
+```{r}
+data1 %>% filter(AnnualCheckups >= 0) %>%
+ggplot(aes(x=AnnualCheckups, fill=Outcome)) + 
+  geom_histogram(binwidth =1, alpha=0.5, position="identity") +
+  xlim(0, 10) + 
+  xlab("Annual Checups") + ylab("Numbers of People") + 
+  labs(title="Distribution of Annual Checkups by Outcome")
+
+
+```
+
+## Healthcare Cost
+
+```{r}
+
+data1 %>% filter(HealthcareCost > 0) %>%
+ggplot(aes(x=HealthcareCost, fill=Outcome)) + 
+  geom_histogram(binwidth =1.0, alpha=1.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+
+data1 %>% filter(Outcome == "Healthy", HealthcareCost > 0) %>%
+ggplot(aes(x=HealthcareCost, fill=Outcome)) + 
+  geom_histogram(binwidth =1.0, alpha=1.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+
+data1 %>% filter(Outcome == "Critical", HealthcareCost > 0) %>%
+ggplot(aes(x=HealthcareCost, fill=Outcome)) + 
+  geom_histogram(binwidth =1.0, alpha=1.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+
+
+```
+
+
+```{r}
+
+ggplot(data = data1, aes(x = Outcome, y = HealthcareCost)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Outcome vs Healthcare Cost", x = "Outcome", y = "Healthcare Cost")
+
+
+
+```
+
