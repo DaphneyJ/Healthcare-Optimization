@@ -140,3 +140,5 @@ print(conf_matrix)
 
 accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
 cat("\nAccuracy:", round(accuracy * 100, 2), "%\n")
+
+
