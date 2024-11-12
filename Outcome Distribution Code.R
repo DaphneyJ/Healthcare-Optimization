@@ -5,7 +5,7 @@ health_data <- read.csv("health_data.csv")
 outcome_breakdown <- table(health_data$Outcome)
 print(outcome_breakdown)
 
-outcome_brakdown_percentage <- prop.table(outcome_breakdown) * 100
+outcome_breakdown_percentage <- prop.table(outcome_breakdown) * 100
 print(outcome_breakdown_percentage)
 
 #example code to ensure even outcome distribution in train & test data
