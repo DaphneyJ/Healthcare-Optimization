@@ -164,123 +164,6 @@ ggcorrplot(cor_matrix, lab=TRUE)
 
 
 
-#Linear Regression EDA
-temp = health_data
-temp$Outcome <- as.numeric(factor(health_data$Outcome, levels = c("Healthy", "AtRisk", "Critical")))
-linear_model_full <- lm(Outcome ~ ., data = temp)
-summary(linear_model_full)
-
-
-
-################### MODEL BUILDING ######################
-
-
-# Split data into Training and Testing sets (70% train, 30% test)
-set.seed(123)
-split <- sample.split(health_data$Outcome, SplitRatio = 0.7)
-train_data <- subset(health_data, split == TRUE)
-test_data <- subset(health_data, split == FALSE)
-
-#Verify Split % 
-nrow(train_data)/nrow(health_data) *100
-nrow(test_data)/nrow(health_data) *100
-
-#Verify Distribution in sets
-table(train_data$Outcome)/nrow(train_data) *100
-table(test_data$Outcome)/nrow(test_data) *100
-
-
-# Multinomial Logistic models
-multinom_model <- multinom(Outcome ~ Age + Diabetes + HeartDisease + MAP, data = train_data)
-multinom_model_full <- multinom(Outcome ~ ., data = train_data)
-summary(multinom_model)
-
-#Ordinal Logistic model
-ordinal_model <- polr(Outcome ~ Age + Diabetes, data = train_data, Hess=TRUE)
-summary(ordinal_model)
-
-#LASSO
-x_train <- model.matrix(Outcome ~ . - 1, data = train_data)  # -1 removes intercept to prevent duplication
-x_test <- model.matrix(Outcome ~ . - 1, data = test_data)
-y_train <- train_data$Outcome
-y_test <- test_data$Outcome
-
-# LASSO Multinomial Models
-lasso_model <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1) #standardized by default
-lasso_model_scaled <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1, standardize = TRUE) #explicit scaling 
-lasso_model_no_scaling <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1, standardize = FALSE) #NO scaling
-
-#plot lasso models optimal lambda
-par(mfrow=c(2,2))
-plot(lasso_model)
-plot(lasso_model_scaled)
-plot(lasso_model_no_scaling)
-
-best_lambda <- lasso_model$lambda.min
-lasso_model$lambda.min
-lasso_model_scaled$lambda.min
-lasso_model_no_scaling$lambda.min  #too large; strong regularization needed 
-
-#View Lasso selected variables
-coefficients <- coef(lasso_model, s = "lambda.min") #Health: -systolic_stg1, +BMI_overweight
-
-
-########################## Predictions ###################
-
-
-# Make predictions on the test data
-#LASSO
-# Check the dimensions to make sure x_train and x_test match the respective y_train and y_test sizes
-#dim(x_train)  # Should match length of y_train
-#dim(x_test)   # Should match length of y_test
-#length(y_train)
-#length(y_test)
-
-predictions <- predict(lasso_model, newx = x_test, s = "lambda.min", type = "response")
-predictions <- drop(predictions)  # removes the unnecessary third dimension
-dim(predictions)
-pred_class_indices  <- max.col(predictions, ties.method = "first")
-pred_class <- factor(pred_class_indices, levels = 1:3, labels = levels(y_test))
-
-#length(pred_class)  
-#length(y_test)   
-
-
-#Multinomial & Ordinal Model no lasso
-pred_multinom <- predict(multinom_model, newdata = test_data)
-pred_multinom_full <- predict(multinom_model_full, newdata = test_data)
-pred_ordinal <- predict(ordinal_model, newdata = test_data)
-
-
-
-######## Model Validation ##########
-
-#lasso multinomial model
-confusion_matrix <- confusionMatrix(pred_class, y_test)
-confusion_matrix
-accuracy <- confusion_matrix$overall[1]
-print('The multinomial logistic model with lasso variable selection, is only predicting the healthy class, and no instances of at-risk or critical. This is a clear sign of bias or class imbalance in the model.')
-cat(accuracy, 'The model accuracy is misleading since the model only correctly predicts the majority class')
-
-tn <- confusion_matrix$table[1, 1]  # True Negative
-fn <- confusion_matrix$table[2, 1]  # False Negative
-fp <- confusion_matrix$table[1, 2]  # False Positive
-tp <- confusion_matrix$table[2, 2]  # True Positive
-precision <- tp / (tp + fp)
-recall <- tp / (tp + fn)
-f1_score <- 2 * (precision * recall) / (precision + recall)
-
-cat("Precision: ", precision, "\n", '--> biased model')
-cat("Recall: ", recall, "\n")
-cat("F1-Score: ", f1_score, "\n")
-
-
-#No lasso models
-confusionMatrix(pred_multinom, y_test)$overall[1]
-confusionMatrix(pred_ordinal, y_test)$overall[1]
-confusionMatrix(pred_multinom_full, y_test)$overall[1]
-
-
 
 ########################## BALANCING ######################
 #creating dfs based off outcomes 
@@ -301,7 +184,7 @@ balanced_data <- bind_rows(healthy_sampled, at_risk, critical_sampled)
 table(balanced_data$Outcome) / nrow(balanced_data) * 100
 
 
-#MODEL BUILDING 
+############################# MODEL BUILDING ##########################
 #Split data
 set.seed(6203)
 train_indices <- createDataPartition(balanced_data$Outcome, p = 0.7, list = FALSE)
@@ -322,8 +205,11 @@ y_test <- as.numeric(test_data$Outcome) - 1
 set.seed(6203)
 lasso_model <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1)  # alpha=1 for LASSO
 
+coefficients <- coef(lasso_model, s = "lambda.min") 
+#healthy: diabetes, heart disease, genetic risk
+#at risk: diabetes, healthcare cost, diastolic, cholestorl
 
-#Predictions
+############################## Predictions ############################# 
 pred_probs <- predict(lasso_model, newx = x_test, s = "lambda.min", type = "response")
 pred_probs <- drop(pred_probs)  
 pred_lasso <- max.col(pred_probs) - 1  
@@ -343,13 +229,27 @@ confusionMatrix(pred_multinom_full, test_data$Outcome)
 confusionMatrix(pred_ordinal, test_data$Outcome)
 
 #Accuracy
-confusionMatrix(pred_lasso, test_data$Outcome)$overall['Accuracy']
+confusionMatrix(pred_ordinal, test_data$Outcome)$overall['Accuracy']
 confusionMatrix(pred_multinom, test_data$Outcome)$overall['Accuracy']
 confusionMatrix(pred_multinom_full, test_data$Outcome)$overall['Accuracy']
-confusionMatrix(pred_ordinal, test_data$Outcome)$overall['Accuracy']
+confusionMatrix(pred_lasso, test_data$Outcome)$overall['Accuracy']
 
 
+############################# Decision Trees #####################
+library(rpart)
+library(rpart.plot)
 
+train_data$ActionPlan <- ifelse(train_data$Outcome == "Healthy", "Maintain healthy lifestyle",
+                                ifelse(train_data$Outcome == "At Risk", "Preventive Care",
+                                       "Urgent medical attention"))
+
+decision_tree_model <- rpart(ActionPlan ~ Age + Bmi + GeneticRisk + ExerciseFrequency + MedicationAdherence,
+                             data = train_data, method = "class")
+
+rpart.plot(decision_tree_model, type = 4, extra = 101)
+print('Low genetic risk, patient should maintain a healthy lifestyle')
+print('High genetic risk indicates patient is at risk, and requires preventative care')
+print('High genetic risk combined with Obesity indicates patient is critical, and needs immediate medical attention.')
 
 
 
