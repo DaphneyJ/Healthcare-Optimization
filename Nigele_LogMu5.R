@@ -28,7 +28,7 @@ health_data$Outcome <- factor(health_data$Outcome,
                               levels = c("At Risk", "Critical", "Healthy"),
                               labels = c("At_Risk", "Critical", "Healthy"))
 
-# Step 2: Balance the Dataset by Undersampling
+# Balance the Dataset by Undersampling
 healthy <- health_data %>% filter(Outcome == "Healthy")
 at_risk <- health_data %>% filter(Outcome == "At_Risk")
 critical <- health_data %>% filter(Outcome == "Critical")
@@ -48,7 +48,7 @@ health_data_balanced <- health_data_balanced[sample(nrow(health_data_balanced)),
 selected_data <- health_data_balanced 
 # selected_data <- health_data %>% select(all_of(top_10_features), Outcome)
 
-# Step 4: Split Data into Training and Testing Sets
+# Split Data into Training and Testing Sets
 set.seed(123)
 trainIndex <- createDataPartition(selected_data$Outcome, p = .7, list = FALSE, times = 1)
 train_data <- selected_data[ trainIndex,]
@@ -60,7 +60,7 @@ y_train <- train_data$Outcome
 X_test <- model.matrix(Outcome ~ . - 1, data = test_data)
 y_test <- test_data$Outcome
 
-# Step 5a: Train Multinomial Logistic Regression Model
+# Train Multinomial Logistic Regression Model
 set.seed(123)
 tuned_model <- cv.glmnet(X_train, y_train, family = "multinomial", type.measure = "class", alpha = 1)
 
