@@ -72,12 +72,13 @@ top_10_features <- weights %>%
   slice(1:10) %>%
   pull(1)  # Use column index 1 to select the feature names
 
+print(top_10_features)
 # Filter dataset to only include the top 10 features and the target variable
 selected_data <- health_data_balanced %>% select(all_of(top_10_features), Outcome)
 # selected_data <- health_data %>% select(all_of(top_10_features), Outcome)
 
 # Step 4: Split Data into Training and Testing Sets
-set.seed(123)
+# set.seed(123)
 trainIndex <- createDataPartition(selected_data$Outcome, p = .7, list = FALSE, times = 1)
 train_data <- selected_data[ trainIndex,]
 test_data  <- selected_data[-trainIndex,]
@@ -109,3 +110,67 @@ print("F1 ")
 print(conf_matrix_log_reg$byClass[,'F1'])
 print(" ")
 print(conf_matrix_log_reg$byClass)
+
+
+# Step 5b: Train Decision Tree Models for Each Top Feature
+trees <- list()
+for (feature in top_10_features) {
+  formula <- as.formula(paste("Outcome ~", feature))
+  tree_model <- rpart(formula, data = train_data, method = "class")
+  trees[[feature]] <- tree_model
+}
+
+# Step 6: Function to Classify Each Patient's Health Areas with Tree Models
+classify_patient_areas <- function(patient_data) {
+  area_classifications <- list()
+  
+  # Loop through each tree model and predict the specific category for each top feature
+  for (feature in top_10_features) {
+    tree_model <- trees[[feature]]
+    
+    # Create a data frame with only the relevant feature for prediction
+    feature_data <- data.frame(patient_data[feature])
+    colnames(feature_data) <- feature
+    
+    # Predict category using the feature-specific tree model
+    predicted_class <- predict(tree_model, feature_data, type = "class")
+    
+    # Store the specific classification result for the feature
+    area_classifications[[feature]] <- as.character(predicted_class)
+  }
+  
+  return(area_classifications)
+}
+
+# Step 7a: Filter Patients by Predicted Outcome Categories
+# Using the logistic regression predictions, select 2 patients from each outcome category
+at_risk_patients <- test_data %>%
+  filter(predictions_log_reg == "At_Risk") %>%
+  slice(1:2)
+
+critical_patients <- test_data %>%
+  filter(predictions_log_reg == "Critical") %>%
+  slice(1:2)
+
+healthy_patients <- test_data %>%
+  filter(predictions_log_reg == "Healthy") %>%
+  slice(1:2)
+
+# Combine selected patients into one dataframe
+selected_patients <- bind_rows(at_risk_patients, critical_patients, healthy_patients)
+
+# Step 8: Run Area Classification by Tree Models for Selected Patients
+patient_areas_report <- list()
+
+for (i in 1:nrow(selected_patients)) {
+  patient_data <- selected_patients[i, ]
+  patient_report <- classify_patient_areas(patient_data)
+  
+  # Add classification based on initial logistic regression prediction for context
+  outcome_label <- predictions_log_reg[rownames(test_data) == rownames(selected_patients[i,])]
+  patient_areas_report[[paste("Patient", i, "(", outcome_label, ")")]] <- patient_report
+}
+
+# Display the report for each selected patient
+print("Detailed Area Classification Report for Selected Patients:")
+print(patient_areas_report)
