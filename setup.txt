@@ -1,0 +1,32 @@
+## Create cmd in working directory 
+
+Create bat file
+
+Place in bat file: cmd.exe
+
+## Open bat file
+
+## Configure your git username and email
+
+git config --global user.name "$username"
+git config --global user.email "$email"
+
+## Clone repository from GitHub
+
+Git clone "repository link"
+
+## Add your code to be tracked
+
+Git add file_name
+
+## Commit your changes with a message
+
+Git commit -am "adding my code"
+
+## Push my code to the GitHub main branch
+
+Git push
+
+## Pull code from GitHub
+
+Git pull
