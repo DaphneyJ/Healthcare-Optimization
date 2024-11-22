@@ -95,7 +95,7 @@ any(is.na(health_data))
 
 ################### EXPLORATORY ANALYSIS ######################
 
-# Check structure and summary of the dataset
+# Check structure and summary of the data-set
 summary(health_data)
 str(health_data)
 
@@ -108,7 +108,6 @@ ggplot(health_data, aes(x = Outcome)) +
   geom_bar(fill = "skyblue") +
   geom_text(stat = 'count', aes(label = scales::percent(..count../sum(..count..))), vjust = -0.5) +
   labs(title = "Distribution of Outcome", x = "outcome", y = "count")
-
 
 
 #EDA sample 
@@ -146,10 +145,9 @@ ggplot(health_data, aes(x = Gender, y = Age)) +
   geom_boxplot() +
   labs(title = "Age by Gender", x = "Gender", y = "Age")
 
-
 boxplot(health_data$Gender, health_data$Outcome)
 boxplot(health_data$Gender ~ health_data$Outcome)
-# Facet plot: Age vs Outcome, faceted by Gender
+
 ggplot(health_data, aes(x = Outcome, y = Age)) +
   geom_boxplot() +
   facet_wrap(~ Gender) +
@@ -164,7 +162,6 @@ ggcorrplot(cor_matrix, lab=TRUE)
 
 
 
-
 ########################## BALANCING ######################
 #creating dfs based off outcomes 
 healthy <- health_data %>%
@@ -174,6 +171,7 @@ at_risk <- health_data %>%
 critical <- health_data %>%
   filter(Outcome == "Critical")
 
+set.seed(6203)
 #Under sample healthy
 healthy_sampled <- healthy %>% sample_n(size = nrow(at_risk))
 #Over sample  critical 
@@ -206,10 +204,11 @@ set.seed(6203)
 lasso_model <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1)  # alpha=1 for LASSO
 
 coefficients <- coef(lasso_model, s = "lambda.min") 
-#healthy: diabetes, heart disease, genetic risk
-#at risk: diabetes, healthcare cost, diastolic, cholestorl
 
-############################## Predictions ############################# 
+
+
+############################## PREDICTIONS ############################# 
+#Lasso Predictions
 pred_probs <- predict(lasso_model, newx = x_test, s = "lambda.min", type = "response")
 pred_probs <- drop(pred_probs)  
 pred_lasso <- max.col(pred_probs) - 1  
@@ -222,11 +221,32 @@ pred_multinom <- predict(multinom_model, newdata = test_data)
 pred_multinom_full <- predict(multinom_model_full, newdata = test_data)
 pred_ordinal <- predict(ordinal_model, newdata = test_data)
 
+
+######################## MODEL VALIDATION ###################### 
 #Confusion Matrices
-confusionMatrix(pred_lasso, y_test_factor)
-confusionMatrix(pred_multinom, test_data$Outcome)
-confusionMatrix(pred_multinom_full, test_data$Outcome)
-confusionMatrix(pred_ordinal, test_data$Outcome)
+lasso_matrix <- confusionMatrix(pred_lasso, y_test_factor)
+multinom_matrix <- confusionMatrix(pred_multinom, test_data$Outcome)
+full_multinom_matrix <- confusionMatrix(pred_multinom_full, test_data$Outcome)
+ordinal_matrix <- confusionMatrix(pred_ordinal, test_data$Outcome)
+
+#lasso confusion matrix
+tn <- lasso_matrix$table[1, 1]  # True Negative
+fn <- lasso_matrix$table[2, 1]  # False Negative
+fp <- lasso_matrix$table[1, 2]  # False Positive
+tp <- lasso_matrix$table[2, 2]  # True Positive
+precision <- tp / (tp + fp)
+recall <- tp / (tp + fn)
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+#full model confusion matrix
+tn <- full_multinom_matrix$table[1, 1]  # True Negative
+fn <- full_multinom_matrix$table[2, 1]  # False Negative
+fp <- full_multinom_matrix$table[1, 2]  # False Positive
+tp <- full_multinom_matrix$table[2, 2]  # True Positive
+precision <- tp / (tp + fp)
+recall <- tp / (tp + fn)
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
 
 #Accuracy
 confusionMatrix(pred_ordinal, test_data$Outcome)$overall['Accuracy']
@@ -235,27 +255,65 @@ confusionMatrix(pred_multinom_full, test_data$Outcome)$overall['Accuracy']
 confusionMatrix(pred_lasso, test_data$Outcome)$overall['Accuracy']
 
 
-############################# Decision Trees #####################
+########################## Decision Trees ##########################
 library(rpart)
-library(rpart.plot)
 
+#label action plans
 train_data$ActionPlan <- ifelse(train_data$Outcome == "Healthy", "Maintain healthy lifestyle",
-                                ifelse(train_data$Outcome == "At Risk", "Preventive Care",
-                                       "Urgent medical attention"))
+                         ifelse(train_data$Outcome == "At Risk", "Preventive Care", "Urgent medical attention"))
 
-decision_tree_model <- rpart(ActionPlan ~ Age + Bmi + GeneticRisk + ExerciseFrequency + MedicationAdherence,
-                             data = train_data, method = "class")
+train_data$ActionPlan <- as.factor(train_data$ActionPlan)
 
-rpart.plot(decision_tree_model, type = 4, extra = 101)
-print('Low genetic risk, patient should maintain a healthy lifestyle')
-print('High genetic risk indicates patient is at risk, and requires preventative care')
-print('High genetic risk combined with Obesity indicates patient is critical, and needs immediate medical attention.')
-
+#Split data into training and test set
+set.seed(123)  
+split <- sample.split(train_data$ActionPlan, SplitRatio = 0.7)
+train_set <- subset(train_data, split == TRUE)
+validation_set <- subset(train_data, split == FALSE)
 
 
+#Fit the Decision Tree
+set.seed(90)
+table(train_data$ActionPlan)
+
+decision_tree_model <- rpart(ActionPlan ~ Age + Bmi + GeneticRisk + ExerciseFrequency + MedicationAdherence, data = train_data, method = "class")
+rpart.plot(decision_tree_model, type = 3, extra = 101) #genetic risk, BMI
+
+decision_tree_model2 <- rpart(ActionPlan ~ . - Outcome, data = train_data, method = "class")
+decision_tree_model2 <- rpart(ActionPlan ~ Age+AnnualCheckups+Bmi+Cholesterol+Diastolic+GeneticRisk+HealthcareCost+MAP, data = train_data, method = "class")
+rpart.plot(decision_tree_model2, type = 3, extra = 101) #genetic risk, healthcare cost
+
+decision_tree_model3 <- rpart(ActionPlan ~ . - Outcome - HealthcareCost, data = train_data, method = "class")
+rpart.plot(decision_tree_model3, type = 3, extra = 101) #genetic risk, cholesterol
 
 
+#Important variables
+importance <- as.data.frame(varImp(decision_tree_model, scale = FALSE))
+print(importance)
+importance2 <- as.data.frame(varImp(decision_tree_model2, scale = FALSE))
+print(importance2)
+importance3 <- as.data.frame(varImp(decision_tree_model3, scale = FALSE))
+print(importance3) 
 
+
+#MODEL VALIDATION 
+# Predictions
+predicted <- predict(decision_tree_model, newdata = validation_set, type = "class")
+predicted2 <- predict(decision_tree_model2, newdata = validation_set, type = "class")
+predicted3<- predict(decision_tree_model3, newdata = validation_set, type = "class")
+
+
+#confusion matrices
+confusion_matrix <- confusionMatrix(predicted, validation_set$ActionPlan)
+confusion_matrix2 <- confusionMatrix(predicted2, validation_set$ActionPlan)
+confusion_matrix3 <- confusionMatrix(predicted3, validation_set$ActionPlan)
+
+print(confusion_matrix)
+
+
+#Tree Accuracy
+confusion_matrix$overall['Accuracy'] 
+confusion_matrix2$overall['Accuracy']
+confusion_matrix3$overall['Accuracy']
 
 
 
