@@ -51,8 +51,8 @@ critical <- health_data %>% filter(Outcome == "Critical")
 set.seed(6203)
 
 
-samples_critical <- critical %>% sample_n(size = nrow(at_risk)/4)
-samples_healthy <- healthy %>% sample_n(size = nrow(at_risk)/4)
+samples_critical <- critical %>% sample_n(size = nrow(at_risk)/3)
+samples_healthy <- healthy %>% sample_n(size = nrow(at_risk)/3)
 
 # Bind into one balanced dataframe and shuffle rows
 health_data_balanced <- bind_rows(samples_healthy, at_risk, samples_critical)
@@ -100,6 +100,23 @@ print(conf_matrix_log_reg$byClass)
 # Train a Decision Tree Model Using All Features
 overall_tree <- rpart(Outcome ~ ., data = train_data, method = "class")
 
+# Evaluate decision tree model
+predictions_tree <- predict(overall_tree, test_data, type = "class")
+conf_matrix_tree <- confusionMatrix(factor(predictions_tree, levels = levels(y_test)), y_test)
+
+# Print decision tree evaluation metrics
+cat("Decision Tree Results:\n")
+cat("Accuracy:", conf_matrix_tree$overall['Accuracy'], "\n")
+cat("Confusion Matrix:\n")
+print(conf_matrix_tree$table)
+cat("Recall:\n")
+print(conf_matrix_tree$byClass[, 'Recall'])
+cat("Precision:\n")
+print(conf_matrix_tree$byClass[, 'Precision'])
+cat("F1 Score:\n")
+print(conf_matrix_tree$byClass[, 'F1'])
+
+
 # Function to Classify and Display Specific Category with Values for Each Patient
 classify_patient_overall <- function(patient_data) {
   classification <- list()
@@ -121,8 +138,10 @@ print_patient_report <- function(patient_id, outcome_label, classifications) {
   cat("\n")
 }
 
+rowData <- nrow(test_data) %/% 350
+
 # Loop Through All Patients in Test Data and Generate Report
-for (i in 1:nrow(test_data)) {
+for (i in 1:rowData ) {
   patient_data <- test_data[i, ]
   patient_classifications <- classify_patient_overall(patient_data)
   

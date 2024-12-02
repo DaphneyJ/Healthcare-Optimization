@@ -1,4 +1,3 @@
-
 if (!require(caret)) install.packages("caret", dependencies = TRUE)
 if (!require(glmnet)) install.packages("glmnet")
 if (!require(dplyr)) install.packages("dplyr")
@@ -12,7 +11,6 @@ library(dplyr)
 library(e1071)
 library(rpart)
 library(FSelectorRcpp)
-
 
 health_data <- read.csv('health_struct.csv', header = TRUE)
 
@@ -37,11 +35,9 @@ health_data$PhysicalActivityLevel <- factor(health_data$PhysicalActivityLevel, l
 health_data$DietQuality <- factor(health_data$DietQuality, levels = c("Poor", "Average", "Good"))
 health_data$MedicationAdherence <- factor(health_data$MedicationAdherence, levels = c("Low", "Medium", "High"))
 
-
 health_data$Outcome <- factor(health_data$Outcome,
                               levels = c("At Risk", "Critical", "Healthy"),
                               labels = c("At_Risk", "Critical", "Healthy"))
-
 
 healthy <- health_data %>% filter(Outcome == "Healthy")
 at_risk <- health_data %>% filter(Outcome == "At_Risk")
@@ -64,9 +60,15 @@ top_10_features <- weights %>% arrange(desc(importance)) %>% slice(1:10) %>% pul
 
 # Split Data into Training and Testing Sets
 set.seed(123)
+
 trainIndex <- createDataPartition(health_data_balanced$Outcome, p = .7, list = FALSE, times = 1)
+
 train_data <- health_data_balanced[trainIndex, ]
 test_data <- health_data_balanced[-trainIndex, ]
+
+dist <- prop.table(table(train_data$Outcome)) * 100
+distTest <- prop.table(table(test_data$Outcome)) * 100
+distData <- prop.table(table(health_data_balanced$Outcome)) * 100
 
 # Prepare features for glmnet (as.matrix and factor conversion)
 X_train <- model.matrix(Outcome ~ . - 1, data = train_data)
@@ -96,15 +98,77 @@ print(conf_matrix_log_reg$byClass[,'F1'])
 print(" ")
 print(conf_matrix_log_reg$byClass)
 
+# Label action plans
+train_data$ActionPlan <- ifelse(train_data$Outcome == "Healthy", "Maintain healthy lifestyle",
+                                ifelse(train_data$Outcome == "At Risk", "Preventive Care", "Urgent medical attention"))
+train_data$ActionPlan <- as.factor(train_data$ActionPlan)
+
+test_data$ActionPlan <- ifelse(test_data$Outcome == "Healthy", "Maintain healthy lifestyle",
+                                ifelse(test_data$Outcome == "At Risk", "Preventive Care", "Urgent medical attention"))
+test_data$ActionPlan <- as.factor(test_data$ActionPlan)
+
 
 # Train Decision Tree Models for Each Top Feature
 trees <- list()
 for (feature in top_10_features) {
-  formula <- as.formula(paste("Outcome ~", feature))
+  formula <- as.formula(paste("ActionPlan ~", feature))
   tree_model <- rpart(formula, data = train_data, method = "class")
   trees[[feature]] <- tree_model
 }
 
+# Evaluate Each Decision Tree Model
+tree_metrics <- data.frame(
+  Feature = character(),
+  Accuracy = numeric(),
+  Recall = numeric(),
+  Precision = numeric(),
+  F1 = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (feature in top_10_features) {
+  tree_model <- trees[[feature]]
+  predictions_tree <- predict(tree_model, newdata = test_data, type = "class")
+  
+  # Ensure predictions are factors with correct levels
+  predictions_tree <- factor(predictions_tree, levels = levels(test_data$ActionPlan))
+  
+  # Compute confusion matrix
+  conf_matrix_tree <- confusionMatrix(predictions_tree, test_data$ActionPlan)
+  
+  # Extract metrics with error handling
+  tryCatch({
+    accuracy <- conf_matrix_tree$overall['Accuracy']
+    # Handle byClass being a vector or matrix
+    if (is.null(dim(conf_matrix_tree$byClass))) {
+      # Single-class predictions, replicate values
+      recall <- conf_matrix_tree$byClass['Recall']
+      precision <- conf_matrix_tree$byClass['Precision']
+      f1 <- conf_matrix_tree$byClass['F1']
+    } else {
+      # Multi-class predictions
+      recall <- mean(conf_matrix_tree$byClass[, 'Recall'], na.rm = TRUE)
+      precision <- mean(conf_matrix_tree$byClass[, 'Precision'], na.rm = TRUE)
+      f1 <- mean(conf_matrix_tree$byClass[, 'F1'], na.rm = TRUE)
+    }
+    
+    # Append metrics to dataframe
+    tree_metrics <- rbind(tree_metrics, data.frame(
+      Feature = feature,
+      Accuracy = accuracy,
+      Recall = recall,
+      Precision = precision,
+      F1 = f1
+    ))
+  }, error = function(e) {
+    message("Error in calculating metrics for feature: ", feature)
+    print(e)
+  })
+}
+
+# Print metrics for all decision trees
+print(tree_metrics)
+write.csv(tree_metrics, "decision_tree_metrics.csv", row.names = FALSE)
 # Function to Classify and Display Specific Category with Values for Each Feature
 classify_patient_areas <- function(patient_data) {
   classification <- list()
@@ -117,7 +181,6 @@ classify_patient_areas <- function(patient_data) {
   return(classification)
 }
 
-
 print_patient_report <- function(patient_id, outcome_label, classifications) {
   cat(paste0("Patient ", patient_id, " (", outcome_label, "):\n"))
   for (feature in names(classifications)) {
@@ -126,16 +189,12 @@ print_patient_report <- function(patient_id, outcome_label, classifications) {
   cat("\n")
 }
 
-rowData <- nrow(test_data) %/% 330
+rowData <- nrow(test_data) %/% 350
 
-# Step 8: Loop Through All Patients in Test Data and Generate Report
+# Loop Through All Patients in Test Data and Generate Report
 for (i in 1:rowData) {
   patient_data <- test_data[i, ]
   patient_classifications <- classify_patient_areas(patient_data)
-
-  # Get the logistic regression outcome label for the patient
   outcome_label <- predictions_log_reg[i]
-
-  # Print report 
   print_patient_report(i, outcome_label, patient_classifications)
 }
