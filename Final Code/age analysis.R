@@ -30,7 +30,7 @@ health_data <- separate(health_data, BloodPressure, into = c("SystolicBP", "Dias
 #Convert from character to numerical
 health_data$Systolic <- as.numeric(health_data$SystolicBP)
 health_data$Diastolic <- as.numeric(health_data$DiastolicBP)
-health_data$MAP = (1/3) * health_data$Systolic + (2/3) * health_data$Diastolic
+health_data$MAP = (1/3) * (health_data$Systolic + (2 * health_data$Diastolic))
 
 #Create Categories:
 #Categorize Systolic Blood Pressure
@@ -40,6 +40,11 @@ health_data$Systolic <- ifelse(health_data$SystolicBP < 120, "Normal",
 #Categorize Diastolic Blood Pressure
 health_data$Diastolic <- ifelse(health_data$DiastolicBP < 80, "Normal",
                                         ifelse(health_data$DiastolicBP >= 80 & health_data$DiastolicBP <= 89, "Hypertension_sg1", "Hypertension_sg2"))
+
+#Categorize MAP
+health_data$MAP <- ifelse(health_data$MAP < 90, "Normal",
+                                ifelse(health_data$MAP >= 90 & health_data$MAP <= 92, "Elevated",
+                                       ifelse(health_data$MAP > 92 & health_data$MAP <= 96, "Hypertension_sg1", "Hypertension_sg2")))
 
 #Categorize Cholesterol
 health_data$Cholesterol <- ifelse(health_data$CholesterolLevel < 200, "Healthy",
@@ -72,6 +77,7 @@ health_data$MedicationAdherence <- as.factor(health_data$MedicationAdherence)
 health_data$Outcome <- factor(health_data$Outcome, levels = c("Healthy", "At Risk", "Critical"))
 health_data$Systolic <- factor(health_data$Systolic, levels = c("Normal", "Elevated", "Hypertension_sg1", "Hypertension_sg2"))
 health_data$Diastolic <- factor(health_data$Diastolic, levels = c("Normal", "Hypertension_sg1", "Hypertension_sg2"))
+health_data$MAP <- factor(health_data$MAP, levels = c("Normal", "Elevated", "Hypertension_sg1", "Hypertension_sg2"))
 health_data$Cholesterol <- factor(health_data$Cholesterol, levels = c("Healthy", "At-risk", "High"))
 health_data$Bmi <- factor(health_data$Bmi, levels = c("Underweight", "Normal weight", "Overweight", "Obese"))
 
@@ -231,7 +237,8 @@ numerical_variables <- health_data_balanced[c(1,11,12,13)]
 cor_matrix = cor(numerical_variables)
 ggcorrplot(cor_matrix, lab=TRUE) #heatmap
 
-health_data <- health_data_balanced
+health_data_balanced <- health_data_balanced %>%
+  select(-Systolic,-Diastolic)
 
 
 ########################### Age Analysis ###############################
