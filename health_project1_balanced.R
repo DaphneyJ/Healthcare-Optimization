@@ -173,9 +173,9 @@ critical <- health_data %>%
 
 set.seed(6203)
 #Under sample healthy
-healthy_sampled <- healthy %>% sample_n(size = nrow(at_risk))
+healthy_sampled <- healthy %>% sample_n(size = nrow(at_risk)/2)
 #Over sample  critical 
-critical_sampled <- critical %>% sample_n(size = nrow(at_risk), replace = TRUE)
+critical_sampled <- critical %>% sample_n(size = nrow(at_risk)/4, replace = TRUE)
 balanced_data <- bind_rows(healthy_sampled, at_risk, critical_sampled)
 
 #verify distribution
@@ -257,6 +257,7 @@ confusionMatrix(pred_lasso, test_data$Outcome)$overall['Accuracy']
 
 ########################## Decision Trees ##########################
 library(rpart)
+library(rpart.plot)
 
 #label action plans
 train_data$ActionPlan <- ifelse(train_data$Outcome == "Healthy", "Maintain healthy lifestyle",
@@ -315,5 +316,53 @@ confusion_matrix$overall['Accuracy']
 confusion_matrix2$overall['Accuracy']
 confusion_matrix3$overall['Accuracy']
 
+######################### METRICS DF for Dashboard ############################# 
 
+#Export Model Performance
+model_performance <- data.frame(
+  Model = c("Multinomial Lasso (Balanced)", "Multinomial Lasso (At-Risk Majority)"),
+  Accuracy = c(0.6424, 0.717),
+  F1_Score = c(0.6462, 0.6062),  
+  Precision = c(0.6529, 0.7502), 
+  Recall = c(0.6423, 0.5682))     
+write.csv(model_performance, "model_performance.csv", row.names = FALSE)
+
+#Export confusion matrix
+confusion_data <- as.data.frame(as.table(lasso_matrix$table))
+write.csv(confusion_data, "confusion_matrix.csv", row.names = FALSE)
+
+
+#Export distribution
+class_distribution <- data.frame(
+  Class = c("Healthy", "At-Risk", "Critical"),
+  Before_Balancing = c(70, 10, 20),
+  After_Balancing_model1 = c(33.3333333, 33.3333333, 33.3333333),
+  After_Balancing_model2 = c(29, 57, 14)    )
+write.csv(class_distribution, "class_distribution.csv", row.names = FALSE)
+
+#Export LASSO coefficients
+#with labels
+class_labels <- levels(train_data$Outcome)
+coefficients_list <- lapply(seq_along(coefficients), function(class_index) {
+  coef_matrix <- as.matrix(coefficients[[class_index]])
+  coef_df <- data.frame(Feature = rownames(coef_matrix), Coefficient = coef_matrix[, 1])
+  coef_df$Class <- class_labels[class_index]  # Assign class name based on verified labels
+  return(coef_df)
+})
+coefficients_df <- do.call(rbind, coefficients_list)
+write.csv(coefficients_df, "lasso_coefficients.csv", row.names = FALSE)
+
+
+#Action plan counts
+action_plan_summary <- table(train_data$ActionPlan, train_data$Outcome)
+write.csv(as.data.frame(action_plan_summary), "action_plans.csv", row.names = FALSE)
+
+
+#Dataset
+write.csv(test_data, "patient_insights.csv", row.names = FALSE)
+
+test_data$ActionPlan <- ifelse(test_data$Outcome == "Healthy", "Maintain healthy lifestyle",
+                               ifelse(test_data$Outcome == "At Risk", "Preventive Care",
+                                      "Urgent Medical Attention"))
+write.csv(test_data, "test_data_with_action_plans.csv", row.names = FALSE)
 
