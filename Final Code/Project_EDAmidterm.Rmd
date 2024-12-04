@@ -1,0 +1,931 @@
+---
+title: "Project_EDAmidterm"
+author: "Maria Martinez"
+date: "2024-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggcorrplot)
+library(MASS)
+
+library(gridExtra)
+library(readr) #To read the dataset
+library(tidyverse) #For data manipulation and visual analytics
+
+library(correlationfunnel)
+library(DataExplorer)
+
+library(WVPlots)
+library(ggthemes)
+
+library(corrplot)
+
+library(ROCR)
+
+library(caret)
+#library(reshape2)
+  
+```
+
+
+```{r}
+rm(list = ls())
+getwd()
+```
+
+
+```{r}
+data1 <- read.csv("health_struct.csv", header = TRUE)
+str(data1)
+```
+
+```{r}
+
+data1 %>% plot_missing()
+```
+
+
+```{r}
+#Convert categorical variables (Nominal variables)
+data1$Gender <- as.factor(data1$Gender)
+data1$SmokingStatus <- as.factor(data1$SmokingStatus)
+data1$AlcoholConsumption <- as.factor(data1$AlcoholConsumption)
+data1$ExerciseFrequency <- as.factor(data1$ExerciseFrequency)
+data1$Diabetes <- as.factor(data1$Diabetes)
+data1$HeartDisease <- as.factor(data1$HeartDisease)
+data1$PhysicalActivityLevel <- as.factor(data1$PhysicalActivityLevel)
+data1$DietQuality <- as.factor(data1$DietQuality)
+data1$MedicationAdherence <- as.factor(data1$MedicationAdherence)
+
+```
+
+
+
+```{r}
+#Specify order of levels for Ordinal Variables
+data1$Outcome <- factor(data1$Outcome, levels = c("Healthy", "At Risk", "Critical"))
+data1$Systolic <- factor(data1$Systolic, levels = c("Normal", "Elevated", "Hypertension_sg1", "Hypertension_sg2"))
+data1$Diastolic <- factor(data1$Diastolic, levels = c("Normal", "Hypertension_sg1", "Hypertension_sg2"))
+data1$LevelCho <- factor(data1$LevelCho, levels = c("Healthy", "At-risk", "High"))
+data1$LevelBmi <- factor(data1$LevelBmi, levels = c("Underweight", "Normal weight", "Overweight", "Obese"))
+
+data1$AlcoholConsumption <- factor(data1$AlcoholConsumption, levels = c("Never", "Occasionally", "Regularly"))
+data1$ExerciseFrequency <- factor(data1$ExerciseFrequency, levels = c("Never", "Rarely", "Sometimes", "Often"))
+data1$PhysicalActivityLevel <- factor(data1$PhysicalActivityLevel, levels = c("Low", "Medium", "High"))
+data1$DietQuality <- factor(data1$DietQuality, levels = c("Poor", "Average", "Good"))
+data1$MedicationAdherence <- factor(data1$MedicationAdherence, levels = c("Low", "Medium", "High"))
+
+
+#Verify changes
+str(data1)
+colSums(is.na(data1))
+any(is.na(data1))
+
+
+```
+
+
+```{r}
+#View the Distribution of the target variable
+table(data1$Outcome)/nrow(data1) * 100  # % of each class
+Outcome_dist <- prop.table(table(data1$Outcome)) * 100
+Outcome_dist
+```
+
+
+```{r}
+ggplot(data1, aes(x = Outcome)) +
+  geom_bar(fill = "skyblue") +
+  geom_text(stat = 'count', aes(label = scales::percent(..count../sum(..count..))), vjust = -0.5) +
+  labs(title = "Distribution of Outcome", x = "outcome", y = "count")
+
+
+```
+## balancing dataset via random undersampling
+#creating dfs based off outcomes 
+
+```{r}
+## balancing dataset via random undersampling
+#creating dfs based off outcomes 
+
+healthy <- data1 %>%
+  filter(Outcome == "Healthy")
+at_risk <- data1 %>%
+  filter(Outcome == "At Risk")
+critical <- data1 %>%
+  filter(Outcome == "Critical")
+
+```
+## Making a little corrections - sizing to critical
+
+```{r}
+
+set.seed(6203)
+samples_atrisk <- at_risk %>%
+  sample_n(size = nrow(critical))
+samples_healthy <- healthy %>%
+  sample_n(size = nrow(critical))
+
+```
+
+
+```{r}
+## data_balanced with reshuffling
+data1_balanced <- bind_rows(samples_healthy, critical, samples_atrisk)
+data1_balanced <- data1_balanced[sample(nrow(data1_balanced)),]
+
+summary(data1_balanced)
+
+```
+
+
+
+
+```{r}
+data1_balanced %>% group_by(Outcome, Diabetes)  %>% summarise(n= n())
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Diabetes == "Yes"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Diabetes == "No"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(HeartDisease == "Yes"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(HeartDisease == "No"))
+
+
+```
+
+
+```{r}
+
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(LevelCho == "Healthy"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(LevelCho == "At-risk"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(LevelCho == "High"))
+
+
+```
+
+
+```{r}
+data1_balanced %>%  group_by(Outcome) %>% summarise(mean(HeartDisease == "Yes"))
+data1_balanced %>%  group_by(Outcome) %>% summarise(mean(HeartDisease == "No"))
+
+```
+
+
+```{r}
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(LevelBmi == "Underweight"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(LevelBmi == "Normal weight"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(LevelBmi == "Overweight"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(LevelBmi == "Obese"))
+
+```
+
+
+```{r}
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Systolic == "Normal"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Systolic == "Elevated"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Systolic == "Hypertension_sg1"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Systolic == "Hypertension_sg2"))
+
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Diastolic == "Normal"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Diastolic == "Hypertension_sg1"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Diastolic == "Hypertension_sg2"))
+
+```
+
+
+```{r}
+data1_balanced %>% filter(GeneticRisk > 0) %>%
+ggplot(aes(x=GeneticRisk, fill=Outcome)) + 
+  geom_histogram(binwidth =0.1, alpha=0.2, position="identity") +
+  xlim(0, 1) + 
+  xlab("Genetic Risk") + ylab("Numbers of People") + 
+  labs(title="Distribution of Genetic Risk by Outcome")
+
+```
+
+
+```{r}
+data1_balanced %>% 
+  ggplot(aes(y=GeneticRisk, x=Outcome)) + 
+  geom_boxplot() +
+  ylab("GeneticRisk vs Outcome") + xlab("") + 
+  scale_y_log10()
+
+
+```
+
+# Exercise Frequency
+
+```{r}
+
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Never"))
+data1_balanced%>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Rarely"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Sometimes"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Often"))
+
+```
+# Diet Quality
+
+```{r}
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(DietQuality == "Poor"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(DietQuality == "Average"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(DietQuality == "Good"))
+
+```
+```{r}
+```
+
+# Alcohol Consumption
+
+```{r}
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(AlcoholConsumption == "Never"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(AlcoholConsumption == "Occasionally"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(AlcoholConsumption == "Regularly"))
+```
+
+
+# Physical Activity
+```{r}
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(PhysicalActivityLevel == "Low"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(PhysicalActivityLevel == "Medium"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(PhysicalActivityLevel == "High"))
+```
+
+## Gender
+```{r}
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Gender == "Female"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Gender == "Male"))
+data1_balanced %>%  group_by(Outcome) %>% summarize(mean(Gender == "Other"))
+
+
+```
+
+### Age
+```{r}
+data1_balanced %>% filter(Age > 0) %>%
+ggplot(aes(x=Age, fill=Outcome)) + 
+  geom_histogram(binwidth =1, alpha=0.5, position="identity") +
+  xlim(10, 100) + 
+  xlab("Age") + ylab("Numbers of People") + 
+  labs(title="Distribution of Age by Outcome")
+
+```
+
+
+```{r}
+data1_balanced %>% filter(HealthcareCost > 0) %>%
+ggplot(aes(x=HealthcareCost, fill=Outcome)) + 
+  geom_histogram(binwidth =1.0, alpha=1.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+
+```
+
+
+```{r}
+data1_balanced %>% filter(Outcome == "Healthy", HealthcareCost > 0) %>%
+ggplot(aes(x=HealthcareCost, fill=Outcome)) + 
+  geom_histogram(binwidth =1.0, alpha=1.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+data1_balanced %>% filter(Outcome == "Healthy") %>% summarise(maximo = max(HealthcareCost))
+```
+```{r}
+data1_balanced %>% filter(Outcome == "At Risk", HealthcareCost > 0) %>%
+ggplot(aes(x=HealthcareCost, fill=Outcome)) + 
+  geom_histogram(binwidth =1.0, alpha=1.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+data1_balanced %>% filter(Outcome == "At Risk") %>% summarise(maximo = max(HealthcareCost))
+```
+
+
+```{r}
+data1_balanced %>% filter(Outcome == "Critical", HealthcareCost > 0) %>%
+ggplot(aes(x=HealthcareCost, fill=Outcome)) + 
+  geom_histogram(binwidth =1.0, alpha=1.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+
+data1_balanced %>% filter(Outcome == "Critical") %>% summarise(maximo = max(HealthcareCost))
+```
+
+
+# Heart Cholesterol and High Cholesterol 
+
+
+```{r}
+balancedHeartCho <- 
+  data1_balanced %>%  group_by(Outcome) %>% filter(HeartDisease == "Yes" & LevelCho == "High") 
+balancedHeartCho
+summary(balancedHeartCho)
+
+
+```
+
+# Sample of Heart Yes and High Cholesterol
+```{r}
+#View the Distribution of the target variable
+table(balancedHeartCho$Outcome)/nrow(balancedHeartCho) * 100  # % of each class
+Outcome_dist <- prop.table(table(balancedHeartCho$Outcome)) * 100
+Outcome_dist
+
+#balancedHeartCho %>%  group_by(Outcome) %>% summarise(mean(Outcome))
+```
+
+
+```{r}
+balancedHeartCho %>%  group_by(Outcome) %>% summarize(mean(Diabetes == "No"))
+balancedHeartCho %>%  group_by(Outcome) %>% summarize(mean(Diabetes == "Yes"))
+
+```
+
+# Porcentage by Level Bmi per Outcome
+```{r}
+balancedHeartCho %>%  group_by(Outcome) %>% summarise(mean(LevelBmi == "Underweight"))
+balancedHeartCho %>%  group_by(Outcome) %>% summarise(mean(LevelBmi == "Normal weight"))
+balancedHeartCho %>%  group_by(Outcome) %>% summarise(mean(LevelBmi == "Overweight"))
+balancedHeartCho %>%  group_by(Outcome) %>% summarise(mean(LevelBmi == "Obese"))
+```
+
+# Presence of Lvel BMI per population with Heart and High Colesterol
+
+```{r}
+mean(balancedHeartCho$LevelBmi == "Underweight")
+mean(balancedHeartCho$LevelBmi == "Obese")
+mean(balancedHeartCho$LevelBmi == "Overweight")
+mean(balancedHeartCho$LevelBmi == "Normal weight")
+```
+# People Without Heart and Cholesterol
+
+```{r}
+balanced_NoHeartCho <- 
+  data1_balanced %>%  group_by(Outcome) %>% filter(HeartDisease == "No" & LevelCho != "High") 
+balanced_NoHeartCho
+summary(balancedHeartCho)
+```
+
+
+```{r}
+balanced_NoHeartCho %>%  group_by(Outcome) %>% summarize(mean(Diabetes == "No"))
+balanced_NoHeartCho %>%  group_by(Outcome) %>% summarize(mean(Diabetes == "Yes"))
+
+```
+# Presence of Lvel BMI per population WITHOUT Heart and High Colesterol
+
+```{r}
+mean(balanced_NoHeartCho$LevelBmi == "Underweight")
+mean(balanced_NoHeartCho$LevelBmi == "Obese")
+mean(balanced_NoHeartCho$LevelBmi == "Overweight")
+mean(balanced_NoHeartCho$LevelBmi == "Normal weight")
+
+```
+# Sample with Heart  Chol Hyperthesion Problems
+
+```{r}
+balancedHChoHy <- 
+  data1_balanced %>%  filter(HeartDisease == "Yes" & LevelCho == "High" & Systolic != "Normal") 
+balancedHChoHy
+summary(balancedHChoHy)
+
+
+
+```
+
+
+```{r}
+mean(balancedHChoHy$Diabetes == "No")
+mean(balancedHChoHy$Diabetes == "Yes")
+
+```
+
+
+```{r}
+mean(balancedHChoHy$LevelBmi == "Underweight")
+mean(balancedHChoHy$LevelBmi == "Obese")
+mean(balancedHChoHy$LevelBmi == "Overweight")
+mean(balancedHChoHy$LevelBmi == "Normal weight")
+
+
+```
+# Without Heart- Cholesterol - Hypertension
+
+```{r}
+balanced_NoHChoHy <- data1_balanced %>%  filter(HeartDisease == "No" & LevelCho != "High" & Systolic == "Normal") 
+balanced_NoHChoHy
+summary(balanced_NoHChoHy)
+```
+
+
+```{r}
+mean(balanced_NoHChoHy$Diabetes == "No")
+mean(balanced_NoHChoHy$Diabetes == "Yes")
+
+
+```
+
+
+```{r}
+mean(balanced_NoHChoHy$LevelBmi == "Underweight")
+mean(balanced_NoHChoHy$LevelBmi == "Obese")
+mean(balanced_NoHChoHy$LevelBmi == "Overweight")
+mean(balanced_NoHChoHy$LevelBmi == "Normal weight")
+
+```
+# All Illnesses
+
+```{r}
+balancedIllness <- 
+  data1_balanced %>%  filter(HeartDisease == "Yes" & Diabetes == "Yes" & LevelCho == "High" & Systolic != "Normal" & Diastolic != "Normal") 
+balancedIllness
+summary(balancedIllness)
+
+```
+
+
+```{r}
+mean(balancedIllness$LevelBmi == "Underweight")
+mean(balancedIllness$LevelBmi == "Obese")
+mean(balancedIllness$LevelBmi == "Overweight")
+mean(balancedIllness$LevelBmi == "Normal weight")
+
+
+```
+# No Illness
+
+```{r}
+balanced_NoIllness <- 
+  data1_balanced %>%  filter(HeartDisease == "No" & Diabetes == "No" & LevelCho != "High" & Systolic == "Normal" & Diastolic == "Normal") 
+balanced_NoIllness
+summary(balanced_NoIllness)
+
+```
+
+
+```{r}
+mean(balanced_NoIllness$LevelBmi == "Underweight")
+mean(balanced_NoIllness$LevelBmi == "Obese")
+mean(balanced_NoIllness$LevelBmi == "Overweight")
+mean(balanced_NoIllness$LevelBmi == "Normal weight")
+
+
+
+```
+
+```{r}
+```
+
+# Illness vs  behavior variables
+
+# Excercise Frequency
+```{r}
+balancedIllness %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Never"))
+balancedIllness%>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Rarely"))
+balancedIllness %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Sometimes"))
+balancedIllness %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Often"))
+```
+
+
+```{r}
+mean(balancedIllness$ExerciseFrequency == "Never")
+mean(balancedIllness$ExerciseFrequency == "Rarely")
+mean(balancedIllness$ExerciseFrequency == "Sometimes")
+mean(balancedIllness$ExerciseFrequency == "Often")
+
+mean(balancedIllness$ExerciseFrequency != "Often")
+```
+
+
+```{r}
+mean(balancedIllness$PhysicalActivity == "Low")
+
+mean(balancedIllness$PhysicalActivity != "Low")
+
+
+```
+
+
+```{r}
+
+mean(balancedIllness$DietQuality == "Poor")
+
+mean(balancedIllness$DietQuality != "Poor")
+
+
+```
+
+# Alcohol Consumption
+```{r}
+mean(balancedIllness$AlcoholConsumption == "Regularly")
+
+mean(balancedIllness$AlcoholConsumption != "Regularly")
+```
+
+# Smoking
+```{r}
+mean(balancedIllness$SmokingStatus != "Never")
+
+mean(balancedIllness$SmokingStatus == "Never")
+```
+# Medication Adherenc
+
+```{r}
+mean(balancedIllness$MedicationAdherence == "Low")
+
+mean(balancedIllness$MedicationAdherence != "Low")
+
+```
+
+
+```{r}
+
+
+balancedIllness %>% filter(GeneticRisk > 0) %>%
+ggplot(aes(x=GeneticRisk)) + 
+  geom_histogram(binwidth =0.1, alpha=0.2, position="identity") +
+  xlim(0, 1) + 
+  xlab("Genetic Risk") + ylab("Numbers of People") + 
+  labs(title="Distribution of Genetic Risk at Illnesses")
+
+```
+```{r}
+balancedIllness %>% filter(HealthcareCost>0) %>%
+ggplot(aes(x=HealthcareCost)) + 
+  geom_histogram(binwidth =2.0, alpha=2.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+
+
+
+```
+# 
+
+```{r}
+balancedIllness %>% filter(AnnualCheckups > 0) %>%
+ggplot(aes(x=AnnualCheckups)) + 
+  geom_histogram(binwidth =0.1, alpha=0.2, position="identity") +
+  xlim(0, 5) + 
+  xlab("AnnualCheckups") + ylab("Numbers of People") + 
+  labs(title="Distribution of Annual Checkups")
+
+```
+```{r}
+balancedIllness %>% plot_histogram(ggtheme = theme_economist_white())
+
+```
+
+
+```{r}
+```
+
+# No Illness vs  Behavior Variables
+
+# Excercise Frequency
+```{r}
+balanced_NoIllness %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Never"))
+balanced_NoIllness%>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Rarely"))
+balanced_NoIllness %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Sometimes"))
+balanced_NoIllness %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Often"))
+```
+
+
+```{r}
+mean(balanced_NoIllness$ExerciseFrequency == "Never")
+mean(balanced_NoIllness$ExerciseFrequency == "Rarely")
+mean(balanced_NoIllness$ExerciseFrequency == "Sometimes")
+mean(balanced_NoIllness$ExerciseFrequency == "Often")
+
+mean(balanced_NoIllness$ExerciseFrequency != "Often")
+```
+
+
+```{r}
+mean(balanced_NoIllness$PhysicalActivity == "Low")
+
+mean(balanced_NoIllness$PhysicalActivity != "Low")
+
+
+```
+
+
+```{r}
+
+mean(balanced_NoIllness$DietQuality == "Poor")
+
+mean(balanced_NoIllness$DietQuality != "Poor")
+
+
+```
+
+# Alcohol Consumption
+```{r}
+mean(balanced_NoIllness$AlcoholConsumption == "Regularly")
+
+mean(balanced_NoIllness$AlcoholConsumption != "Regularly")
+```
+
+# Smoking
+```{r}
+mean(balanced_NoIllness$SmokingStatus != "Never")
+
+mean(balanced_NoIllness$SmokingStatus == "Never")
+```
+# Medication Adherenc
+
+```{r}
+mean(balanced_NoIllness$MedicationAdherence == "Low")
+
+mean(balanced_NoIllness$MedicationAdherence != "Low")
+
+```
+
+
+```{r}
+balanced_NoIllness %>% filter(GeneticRisk > 0) %>%
+ggplot(aes(x=GeneticRisk)) + 
+  geom_histogram(binwidth =0.1, alpha=0.2, position="identity") +
+  xlim(0, 1) + 
+  xlab("Genetic Risk") + ylab("Numbers of People") + 
+  labs(title="Distribution of Genetic Risk at No Illnesses")
+```
+
+
+```{r}
+balanced_NoIllness %>% filter(HealthcareCost>0) %>%
+ggplot(aes(x=HealthcareCost)) + 
+  geom_histogram(binwidth =2.0, alpha=2.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+
+
+
+```
+# 
+
+```{r}
+balanced_NoIllness %>% filter(AnnualCheckups > 0) %>%
+ggplot(aes(x=AnnualCheckups)) + 
+  geom_histogram(binwidth =0.1, alpha=0.2, position="identity") +
+  xlim(0, 5) + 
+  xlab("AnnualCheckups") + ylab("Numbers of People") + 
+  labs(title="Distribution of Annual Checkups")
+
+```
+```{r}
+
+balanced_NoIllness %>% plot_histogram(ggtheme = theme_economist_white())
+
+```
+
+# Data Balanced and Health Behaviors
+
+```{r}
+balancedIllness %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Never"))
+balancedIllness%>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Rarely"))
+balancedIllness %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Sometimes"))
+balancedIllness %>%  group_by(Outcome) %>% summarize(mean(ExerciseFrequency == "Often"))
+```
+
+
+```{r}
+mean(data1_balanced$ExerciseFrequency == "Never")
+mean(data1_balanced$ExerciseFrequency == "Rarely")
+mean(data1_balanced$ExerciseFrequency == "Sometimes")
+mean(data1_balanced$ExerciseFrequency == "Often")
+
+mean(data1_balanced$ExerciseFrequency != "Often")
+```
+
+
+```{r}
+mean(data1_balanced$PhysicalActivity == "Low")
+
+mean(data1_balanced$PhysicalActivity != "Low")
+
+
+```
+
+
+```{r}
+
+mean(data1_balanced$DietQuality == "Poor")
+
+mean(data1_balanced$DietQuality != "Poor")
+
+
+```
+
+# Alcohol Consumption
+```{r}
+mean(data1_balanced$AlcoholConsumption == "Regularly")
+
+mean(data1_balanced$AlcoholConsumption != "Regularly")
+```
+
+# Smoking
+```{r}
+mean(data1_balanced$SmokingStatus != "Never")
+
+mean(data1_balanced$SmokingStatus == "Never")
+```
+# Medication Adherenc
+
+```{r}
+mean(data1_balanced$MedicationAdherence == "Low")
+
+mean(data1_balanced$MedicationAdherence != "Low")
+
+```
+
+
+```{r}
+data1_balanced%>% filter(GeneticRisk > 0) %>%
+ggplot(aes(x=GeneticRisk)) + 
+  geom_histogram(binwidth =0.1, alpha=0.2, position="identity") +
+  xlim(0, 1) + 
+  xlab("Genetic Risk") + ylab("Numbers of People") + 
+  labs(title="Distribution of Genetic Risk by Outcome")
+```
+
+
+
+
+```{r}
+data1_balanced %>% filter(HealthcareCost>0) %>%
+ggplot(aes(x=HealthcareCost)) + 
+  geom_histogram(binwidth =2.0, alpha=2.0, position="identity") +
+  xlim(0, 50000) + 
+  xlab("Healthcare Cost") + ylab("Numbers of People") + 
+  labs(title="Distribution of Healthcare Cost by Outcome")
+
+
+
+```
+# 
+
+```{r}
+data1_balanced %>% filter(AnnualCheckups > 0) %>%
+ggplot(aes(x=AnnualCheckups)) + 
+  geom_histogram(binwidth =0.1, alpha=0.2, position="identity") +
+  xlim(0, 5) + 
+  xlab("AnnualCheckups") + ylab("Numbers of People") + 
+  labs(title="Distribution of Annual Checkups")
+
+```
+
+```{r}
+str(balancedIllness)
+```
+
+
+
+
+```{r}
+data1 %>% plot_histogram(ggtheme = theme_economist_white())
+```
+# Preparing the data for binomial logistic regression
+
+
+
+```{r}
+DF1 <- data1_balanced %>% filter(Outcome != "At Risk")
+```
+
+
+```{r}
+DF1$Outcome <- fct_recode(DF1$Outcome, "1" = "Critical", "0" = "Healthy")
+DF1$Outcome
+levels(DF1$Outcome)
+
+```
+
+
+```{r}
+model1 <- glm(Outcome ~ LevelCho + Diabetes + HeartDisease + Systolic + LevelBmi, family = "binomial", data = DF1)
+model1
+```
+
+
+```{r}
+DF1$model_prob <- predict(model1, DF1, type = "response")
+
+head(DF1)
+
+```
+
+
+```{r}
+DF1 <-DF1 %>%
+  mutate(model_predict_Outcome = case_when(model_prob>0.50~1,TRUE ~0))
+
+DF1 <- DF1 %>% 
+  mutate(model_predict_Outcome = as.factor(model_predict_Outcome))
+
+ggplot(data=DF1) +
+  geom_bar(aes(x=model_predict_Outcome))
+
+```
+```{r}
+## Taken from TA Module 10
+draw_confusion_matrix <- function(cm) {
+
+  layout(matrix(c(1,1,2)))
+  par(mar=c(2,2,2,2))
+  plot(c(100, 345), c(300, 450), type = "n", xlab="", ylab="", xaxt='n', yaxt='n')
+  title('CONFUSION MATRIX', cex.main=2)
+
+  # create the matrix 
+  rect(150, 430, 240, 370, col='#3F97D0')
+  text(195, 435, '0', cex=1.2)
+  rect(250, 430, 340, 370, col='#F7AD50')
+  text(295, 435, '1', cex=1.2)
+  text(125, 370, 'Predicted', cex=1.3, srt=90, font=2)
+  text(245, 450, 'Actual', cex=1.3, font=2)
+  rect(150, 305, 240, 365, col='#F7AD50')
+  rect(250, 305, 340, 365, col='#3F97D0')
+  text(140, 400, '0', cex=1.2, srt=90)
+  text(140, 335, '1', cex=1.2, srt=90)
+
+  # add in the cm results 
+  res <- as.numeric(cm$table)
+  text(195, 400, res[1], cex=1.6, font=2, col='white')
+  text(195, 335, res[2], cex=1.6, font=2, col='white')
+  text(295, 400, res[3], cex=1.6, font=2, col='white')
+  text(295, 335, res[4], cex=1.6, font=2, col='white')
+
+  # add in the specifics 
+  plot(c(100, 0), c(100, 0), type = "n", xlab="", ylab="", main = "DETAILS", xaxt='n', yaxt='n')
+  text(10, 85, names(cm$byClass[1]), cex=1.2, font=2)
+  text(10, 70, round(as.numeric(cm$byClass[1]), 3), cex=1.2)
+  text(30, 85, names(cm$byClass[2]), cex=1.2, font=2)
+  text(30, 70, round(as.numeric(cm$byClass[2]), 3), cex=1.2)
+  text(50, 85, names(cm$byClass[5]), cex=1.2, font=2)
+  text(50, 70, round(as.numeric(cm$byClass[5]), 3), cex=1.2)
+  text(70, 85, names(cm$byClass[6]), cex=1.2, font=2)
+  text(70, 70, round(as.numeric(cm$byClass[6]), 3), cex=1.2)
+  text(90, 85, names(cm$byClass[7]), cex=1.2, font=2)
+  text(90, 70, round(as.numeric(cm$byClass[7]), 3), cex=1.2)
+
+  # add in the accuracy information 
+  text(30, 35, names(cm$overall[1]), cex=1.5, font=2)
+  text(30, 20, round(as.numeric(cm$overall[1]), 3), cex=1.4)
+  text(70, 35, names(cm$overall[2]), cex=1.5, font=2)
+  text(70, 20, round(as.numeric(cm$overall[2]), 3), cex=1.4)
+}  
+
+
+```
+
+
+```{r}
+Confusion_mat = caret::confusionMatrix(DF1$model_predict_Outcome, DF1$Outcome,positive='1')
+Confusion_mat
+draw_confusion_matrix(Confusion_mat)
+
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
