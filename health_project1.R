@@ -9,6 +9,7 @@ library(tidyr)
 library(ggplot2)
 library(ggcorrplot)
 library(MASS)
+library(dplyr)
 
 
 ################### DATA PRE-PROCESSING ######################
@@ -158,19 +159,7 @@ library(foreign)
 library(VGAM)
 library(MASS)
 
-# Multinomial Logistic model
-multinom_model <- multinom(Outcome ~ Age + Diabetes + HeartDisease, data = health_data)
-multinom_model2 <- vglm(Outcome ~ ., data = health_data, family = multinomial)
-#Ordinal Logistic model
-ordinal_model <- polr(Outcome ~ Age + Diabetes, data = health_data, Hess=TRUE)
-summary(multinom_model)
-summary(ordinal_model)
 
-#Linear Regression EDA
-temp = health_data
-temp$Outcome <- as.numeric(factor(health_data$Outcome, levels = c("Healthy", "At Risk", "Critical")))
-linear_model <- lm(Outcome ~ ., data = temp)
-summary(linear_model)
 
 
 
@@ -198,7 +187,7 @@ table(test_data$Outcome)/nrow(test_data) *100
 
 # Multinomial Logistic models
 multinom_model <- multinom(Outcome ~ Age + Diabetes + HeartDisease, data = train_data)
-multinom_model_full <- vglm(Outcome ~ ., data = train_data, family = multinomial)
+multinom_model_full <- multinom(Outcome ~ ., data = train_data)
 summary(multinom_model)
 
 #Ordinal Logistic model
@@ -213,19 +202,6 @@ y_test <- test_data$Outcome
 
 # LASSO Multinomial Models
 lasso_model <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1) #standardized by default
-lasso_model_scaled <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1, standardize = TRUE) #explicit scaling 
-lasso_model_no_scaling <- cv.glmnet(x_train, y_train, family = "multinomial", alpha = 1, standardize = FALSE) #NO scaling
-
-#plot lasso models optimaL lambda
-par(mfrow=c(2,2))
-plot(lasso_model)
-plot(lasso_model_scaled)
-plot(lasso_model_no_scaling)
-
-best_lambda <- lasso_model$lambda.min
-lasso_model$lambda.min
-lasso_model_scaled$lambda.min
-lasso_model_no_scaling$lambda.min  #too large; strong regularization needed 
 
 #View Lasso selected variables
 coefficients <- coef(lasso_model, s = "lambda.min") #Health: -systolic_stg1, +BMI_overweight
@@ -286,7 +262,11 @@ cat("F1-Score: ", f1_score, "\n")
 #No lasso models
 confusionMatrix(pred_multinom, y_test)$overall[1]
 confusionMatrix(pred_ordinal, y_test)$overall[1]
-#confusionMatrix(pred_multinom_full, y_test)$overall[1]
+confusionMatrix(pred_multinom_full, y_test)$overall[1]
+
+
+
+
 
 
 

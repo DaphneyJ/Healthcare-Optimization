@@ -1,0 +1,10 @@
+"Prediction","Reference","Freq"
+"Healthy","Healthy",2329
+"At Risk","Healthy",1759
+"Critical","Healthy",2
+"Healthy","At Risk",290
+"At Risk","At Risk",7642
+"Critical","At Risk",248
+"Healthy","Critical",1
+"At Risk","Critical",1677
+"Critical","Critical",367
